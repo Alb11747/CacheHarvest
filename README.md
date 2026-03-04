@@ -5,6 +5,7 @@ A lightweight Rust utility for exporting recoverable image assets from Google Ch
 ## Features
 
 - Recursively scans Chrome cache files
+- Supports cache path fallback (`<profile>/Cache`, then `<profile>/Network/Cache`)
 - Detects file types from binary signatures (`infer`)
 - Exports only `image/*` files (PNG, JPG, WebP, GIF, etc.)
 - Skips duplicate binaries by default
@@ -20,6 +21,12 @@ A lightweight Rust utility for exporting recoverable image assets from Google Ch
 
 ```bash
 cargo build --release
+```
+
+Release binary location:
+
+```bash
+target/release/cacheharvest.exe
 ```
 
 ## Usage
@@ -41,6 +48,8 @@ Additional flags:
 ```bash
 cacheharvest.exe --profile "Default" --min-size 128 --keep-duplicates
 ```
+
+If the export directory cannot be created, CacheHarvest exits with a descriptive error.
 
 ## Notes
 
