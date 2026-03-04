@@ -43,6 +43,24 @@ After each run, download it from:
 
 `GitHub -> Actions -> Build Windows EXE -> latest run -> Artifacts`
 
+## GitHub Auto Release (EXE)
+
+This repo also includes `.github/workflows/release-windows-exe.yml`.
+
+When you push a version tag like `v0.1.0`, GitHub Actions will:
+
+- Run tests
+- Build `cacheharvest.exe`
+- Create a GitHub Release for that tag
+- Attach the EXE to the Release assets
+
+Example:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
 ## Usage
 
 Default mode (exports to Downloads/cacheharvest_export):
