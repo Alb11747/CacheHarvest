@@ -6,6 +6,7 @@ use clap::Parser;
 use cacheharvest::cache_scanner::{collect_cache_files, ScanOptions};
 use cacheharvest::errors::AppError;
 use cacheharvest::exporter::{export_images, ExportOptions};
+use cacheharvest::paths::{chrome_cache_candidates, existing_chrome_cache_dirs};
 
 #[derive(Debug, Parser)]
 #[command(name = "cacheharvest")]
@@ -29,22 +30,22 @@ struct Cli {
     keep_duplicates: bool,
 }
 
-fn chrome_cache_dir(profile: &str) -> Result<PathBuf, AppError> {
+fn chrome_cache_dirs(profile: &str) -> Result<Vec<PathBuf>, AppError> {
     let local = env::var("LOCALAPPDATA").map_err(|_| AppError::MissingLocalAppData)?;
-    let path = PathBuf::from(local)
-        .join("Google")
-        .join("Chrome")
-        .join("User Data")
-        .join(profile)
-        .join("Cache");
+    let local_path = PathBuf::from(local);
+    let candidates = chrome_cache_candidates(&local_path, profile);
+    let existing = existing_chrome_cache_dirs(&local_path, profile);
 
-    if !path.exists() {
-        return Err(AppError::MissingChromeCacheDirectory(
-            path.display().to_string(),
+    if existing.is_empty() {
+        return Err(AppError::MissingChromeCacheDirectories(
+            candidates
+                .iter()
+                .map(|path| path.display().to_string())
+                .collect(),
         ));
     }
 
-    Ok(path)
+    Ok(existing)
 }
 
 fn default_export_dir() -> Result<PathBuf, AppError> {
@@ -59,18 +60,22 @@ fn default_export_dir() -> Result<PathBuf, AppError> {
 fn run() -> Result<(), AppError> {
     let args = Cli::parse();
 
-    let cache_dir = chrome_cache_dir(&args.profile)?;
+    let cache_dirs = chrome_cache_dirs(&args.profile)?;
     let output_dir = match args.output_dir {
         Some(path) => path,
         None => default_export_dir()?,
     };
 
-    let files = collect_cache_files(
-        &cache_dir,
-        &ScanOptions {
-            min_size_bytes: args.min_size,
-        },
-    );
+    let mut files = Vec::new();
+    for cache_dir in &cache_dirs {
+        let mut entries = collect_cache_files(
+            cache_dir,
+            &ScanOptions {
+                min_size_bytes: args.min_size,
+            },
+        );
+        files.append(&mut entries);
+    }
 
     let stats = export_images(
         &files,
@@ -78,10 +83,13 @@ fn run() -> Result<(), AppError> {
         &ExportOptions {
             dedupe: !args.keep_duplicates,
         },
-    );
+    )?;
 
     println!("CacheHarvest completed.");
-    println!("Cache directory : {}", cache_dir.display());
+    println!("Cache directories:");
+    for cache_dir in &cache_dirs {
+        println!("  - {}", cache_dir.display());
+    }
     println!("Export directory: {}", output_dir.display());
     println!("Scanned         : {}", stats.scanned_files);
     println!("Exported        : {}", stats.exported_files);

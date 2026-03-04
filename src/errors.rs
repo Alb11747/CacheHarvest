@@ -5,7 +5,11 @@ use std::fmt::{Display, Formatter};
 pub enum AppError {
     MissingHomeDirectory,
     MissingLocalAppData,
-    MissingChromeCacheDirectory(String),
+    MissingChromeCacheDirectories(Vec<String>),
+    OutputDirectoryCreate {
+        path: String,
+        source: std::io::Error,
+    },
     Io(std::io::Error),
 }
 
@@ -14,8 +18,15 @@ impl Display for AppError {
         match self {
             AppError::MissingHomeDirectory => write!(f, "Unable to determine the user home directory."),
             AppError::MissingLocalAppData => write!(f, "Unable to determine LOCALAPPDATA path."),
-            AppError::MissingChromeCacheDirectory(path) => {
-                write!(f, "Chrome cache directory was not found: {path}")
+            AppError::MissingChromeCacheDirectories(paths) => {
+                write!(
+                    f,
+                    "Chrome cache directories were not found. Checked: {}",
+                    paths.join(", ")
+                )
+            }
+            AppError::OutputDirectoryCreate { path, source } => {
+                write!(f, "Unable to create export directory '{path}': {source}")
             }
             AppError::Io(err) => write!(f, "I/O error: {err}"),
         }
@@ -25,6 +36,7 @@ impl Display for AppError {
 impl Error for AppError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
+            AppError::OutputDirectoryCreate { source, .. } => Some(source),
             AppError::Io(err) => Some(err),
             _ => None,
         }

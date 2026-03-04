@@ -5,6 +5,8 @@ use std::path::{Path, PathBuf};
 
 use sha2::{Digest, Sha256};
 
+use crate::errors::AppError;
+
 #[derive(Debug, Default, Clone)]
 pub struct ExportStats {
     pub scanned_files: usize,
@@ -24,14 +26,15 @@ pub fn export_images(
     source_files: &[PathBuf],
     output_dir: &Path,
     options: &ExportOptions,
-) -> ExportStats {
+) -> Result<ExportStats, AppError> {
     let mut stats = ExportStats::default();
     let mut counter: usize = 1;
     let mut seen_hashes: HashSet<String> = HashSet::new();
 
-    if let Err(_err) = fs::create_dir_all(output_dir) {
-        return stats;
-    }
+    fs::create_dir_all(output_dir).map_err(|source| AppError::OutputDirectoryCreate {
+        path: output_dir.display().to_string(),
+        source,
+    })?;
 
     for file in source_files {
         stats.scanned_files += 1;
@@ -88,5 +91,5 @@ pub fn export_images(
         }
     }
 
-    stats
+    Ok(stats)
 }
