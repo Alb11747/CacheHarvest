@@ -29,6 +29,20 @@ Release binary location:
 target/release/cacheharvest.exe
 ```
 
+## GitHub Auto Build (EXE)
+
+This repo includes a GitHub Actions workflow at `.github/workflows/build-windows-exe.yml`.
+
+When you push to GitHub, it will:
+
+- Run tests
+- Build a Windows release binary
+- Upload `cacheharvest.exe` as a workflow artifact named `cacheharvest-windows-exe`
+
+After each run, download it from:
+
+`GitHub -> Actions -> Build Windows EXE -> latest run -> Artifacts`
+
 ## Usage
 
 Default mode (exports to Downloads/cacheharvest_export):
