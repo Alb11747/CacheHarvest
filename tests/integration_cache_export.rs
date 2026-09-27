@@ -23,10 +23,7 @@ fn exports_only_images_and_skips_duplicates() {
     let output_dir = base.join("output");
     fs::create_dir_all(&source_dir).expect("create source");
 
-    let png = vec![
-        0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, b'I', b'H',
-        b'D', b'R',
-    ];
+    let png = include_bytes!("fixtures/pixel.png").to_vec();
     let not_image = b"hello text file".to_vec();
 
     let file_a = source_dir.join("a.bin");
@@ -39,7 +36,8 @@ fn exports_only_images_and_skips_duplicates() {
 
     let files = vec![file_a, file_b, file_c];
 
-    let stats = export_images(&files, &output_dir, &ExportOptions { dedupe: true }).expect("export");
+    let stats =
+        export_images(&files, &output_dir, &ExportOptions { dedupe: true }).expect("export");
 
     assert_eq!(stats.scanned_files, 3);
     assert_eq!(stats.exported_files, 1);
@@ -49,6 +47,7 @@ fn exports_only_images_and_skips_duplicates() {
     let exported = fs::read_dir(&output_dir)
         .expect("read output")
         .filter_map(Result::ok)
+        .filter(|entry| entry.path().extension().and_then(|ext| ext.to_str()) == Some("png"))
         .count();
     assert_eq!(exported, 1);
 
@@ -62,10 +61,7 @@ fn exports_duplicates_when_dedupe_disabled() {
     let output_dir = base.join("output");
     fs::create_dir_all(&source_dir).expect("create source");
 
-    let png = vec![
-        0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, b'I', b'H',
-        b'D', b'R',
-    ];
+    let png = include_bytes!("fixtures/pixel.png").to_vec();
 
     let file_a = source_dir.join("a.bin");
     let file_b = source_dir.join("b.bin");
@@ -73,7 +69,8 @@ fn exports_duplicates_when_dedupe_disabled() {
     fs::write(&file_b, &png).expect("write b");
 
     let files = vec![file_a, file_b];
-    let stats = export_images(&files, &output_dir, &ExportOptions { dedupe: false }).expect("export");
+    let stats =
+        export_images(&files, &output_dir, &ExportOptions { dedupe: false }).expect("export");
 
     assert_eq!(stats.exported_files, 2);
     assert_eq!(stats.skipped_duplicate, 0);
@@ -91,9 +88,18 @@ fn scanner_respects_min_size() {
     fs::write(&small, vec![1_u8; 10]).expect("write small");
     fs::write(&large, vec![1_u8; 200]).expect("write large");
 
-    let files = collect_cache_files(&base, &ScanOptions { min_size_bytes: 128 });
+    let files = collect_cache_files(
+        &base,
+        &ScanOptions {
+            min_size_bytes: 128,
+        },
+    )
+    .expect("scan");
     assert_eq!(files.len(), 1);
-    assert_eq!(files[0].file_name().and_then(|v| v.to_str()), Some("large.bin"));
+    assert_eq!(
+        files[0].file_name().and_then(|v| v.to_str()),
+        Some("large.bin")
+    );
 
     fs::remove_dir_all(base).ok();
 }
@@ -135,18 +141,25 @@ fn exporter_returns_error_when_output_path_is_file() {
     let source_dir = base.join("source");
     fs::create_dir_all(&source_dir).expect("create source");
 
-    let png = vec![
-        0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, b'I', b'H',
-        b'D', b'R',
-    ];
+    let png = include_bytes!("fixtures/pixel.png").to_vec();
     let file_a = source_dir.join("a.bin");
     fs::write(&file_a, &png).expect("write a");
 
     let invalid_output_path = base.join("output_as_file");
     fs::write(&invalid_output_path, b"not a directory").expect("create output file");
 
-    let result = export_images(&[file_a], &invalid_output_path, &ExportOptions { dedupe: true });
+    let result = export_images(
+        &[file_a],
+        &invalid_output_path,
+        &ExportOptions { dedupe: true },
+    );
     assert!(result.is_err());
 
     fs::remove_dir_all(base).ok();
+}
+
+#[test]
+fn scanner_reports_missing_source_directory() {
+    let missing = unique_test_dir("missing");
+    assert!(collect_cache_files(&missing, &ScanOptions { min_size_bytes: 0 }).is_err());
 }

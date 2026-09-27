@@ -16,8 +16,18 @@ struct Cli {
     #[arg(help = "Optional output directory. Defaults to Downloads/cacheharvest_export")]
     output_dir: Option<PathBuf>,
 
-    #[arg(long, default_value = "Default", help = "Chrome profile directory name")]
+    #[arg(
+        long,
+        default_value = "Default",
+        help = "Chrome profile directory name"
+    )]
     profile: String,
+
+    #[arg(
+        long,
+        help = "Scan a copied cache directory instead of the Chrome profile"
+    )]
+    cache_dir: Option<PathBuf>,
 
     #[arg(long, default_value_t = 128, help = "Minimum cache file size in bytes")]
     min_size: u64,
@@ -60,7 +70,10 @@ fn default_export_dir() -> Result<PathBuf, AppError> {
 fn run() -> Result<(), AppError> {
     let args = Cli::parse();
 
-    let cache_dirs = chrome_cache_dirs(&args.profile)?;
+    let cache_dirs = match args.cache_dir {
+        Some(path) => vec![path],
+        None => chrome_cache_dirs(&args.profile)?,
+    };
     let output_dir = match args.output_dir {
         Some(path) => path,
         None => default_export_dir()?,
@@ -73,7 +86,7 @@ fn run() -> Result<(), AppError> {
             &ScanOptions {
                 min_size_bytes: args.min_size,
             },
-        );
+        )?;
         files.append(&mut entries);
     }
 
@@ -95,9 +108,15 @@ fn run() -> Result<(), AppError> {
     println!("Exported        : {}", stats.exported_files);
     println!("Skipped(non-img): {}", stats.skipped_not_image);
     println!("Skipped(dup)    : {}", stats.skipped_duplicate);
+    println!("Invalid cache   : {}", stats.skipped_invalid_cache);
     println!("Read errors     : {}", stats.skipped_read_error);
     println!("Write errors    : {}", stats.skipped_write_error);
 
+    if stats.skipped_read_error + stats.skipped_write_error + stats.skipped_invalid_cache > 0 {
+        return Err(AppError::Io(std::io::Error::other(
+            "Some files could not be recovered; see counts above",
+        )));
+    }
     Ok(())
 }
 

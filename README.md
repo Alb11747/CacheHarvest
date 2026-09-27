@@ -1,91 +1,52 @@
 # CacheHarvest
 
-A lightweight Rust utility for exporting recoverable image assets from Google Chrome cache on Windows.
+A Windows command-line utility for recovering image response bodies from Chrome cache files. Browser data is read only; no network requests are made by the utility.
 
-## Features
+## Supported recovery
 
-- Recursively scans Chrome cache files
-- Supports cache path fallback (`<profile>/Cache`, then `<profile>/Network/Cache`)
-- Detects file types from binary signatures (`infer`)
-- Exports only `image/*` files (PNG, JPG, WebP, GIF, etc.)
-- Skips duplicate binaries by default
-- Uses safe read-only access to browser cache data
-- Supports custom output directory and profile selection
+- Chromium Simple Cache **v5 combined stream 0/1 entries**, with bounded parsing, optional SHA-256 key verification, and stream CRC32 verification when present.
+- Standalone image files identified by binary signatures (PNG, JPEG, WebP, GIF, and other `infer` image formats).
+- Chrome profile discovery under `Cache` and `Network/Cache`, or an explicit copied cache directory.
+- SHA-256 deduplication against both the current run and existing image files in the output directory.
+- Exclusive file creation: existing exports are never overwritten. `--keep-duplicates` creates additional uniquely numbered files.
+- Append-only `manifest.jsonl` recording source paths, cache keys, detected URLs, output paths, MIME types and hashes, including duplicate associations.
 
-## Requirements
+## Build and test
 
-- Rust stable toolchain
-- Windows 10/11
+Requires a current stable Rust toolchain. On Windows:
 
-## Build
-
-```bash
-cargo build --release
+```powershell
+cargo test --locked --all-targets --all-features
+cargo build --locked --release
 ```
 
-Release binary location:
-
-```bash
-target/release/cacheharvest.exe
-```
-
-## GitHub Auto Build (EXE)
-
-This repo includes a GitHub Actions workflow at `.github/workflows/build-windows-exe.yml`.
-
-When you push to GitHub, it will:
-
-- Run tests
-- Build a Windows release binary
-- Upload `cacheharvest.exe` as a workflow artifact named `cacheharvest-windows-exe`
-
-After each run, download it from:
-
-`GitHub -> Actions -> Build Windows EXE -> latest run -> Artifacts`
-
-## GitHub Auto Release (EXE)
-
-This repo also includes `.github/workflows/release-windows-exe.yml`.
-
-When you push a version tag like `v0.1.0`, GitHub Actions will:
-
-- Run tests
-- Build `cacheharvest.exe`
-- Create a GitHub Release for that tag
-- Attach the EXE to the Release assets
-
-Example:
-
-```bash
-git tag v0.1.0
-git push origin v0.1.0
-```
+The executable is `target/release/cacheharvest.exe`. GitHub Actions builds and uploads a Windows executable for pushes and pull requests; pushing a version tag such as `v0.1.1` publishes a release with the executable attached.
 
 ## Usage
 
-Default mode (exports to Downloads/cacheharvest_export):
-
-```bash
+```powershell
+# Default Chrome profile; exports to Downloads/cacheharvest_export
 cacheharvest.exe
+
+# Explicit output and profile
+cacheharvest.exe "C:\RecoveredImages" --profile "Profile 1"
+
+# Recover from a copied cache, without requiring LOCALAPPDATA
+cacheharvest.exe "C:\RecoveredImages" --cache-dir "D:\CacheCopy"
+
+cacheharvest.exe --min-size 128 --keep-duplicates
 ```
 
-Custom output folder:
+`--min-size` filters source file sizes, not extracted body sizes. Close Chrome or use a cache copy for consistent results. Use an output directory outside the source cache and run one exporter per output directory at a time.
 
-```bash
-cacheharvest.exe "C:\\MyCustomFolder"
-```
+The manifest preserves the full cache key because partitioned keys may contain more than a URL. A URL is recorded only when an HTTP(S) URL can be identified. Original filenames are not used as output paths. The manifest can contain private browsing URLs; treat it like the cache itself.
 
-Additional flags:
+## Limits and error reporting
 
-```bash
-cacheharvest.exe --profile "Default" --min-size 128 --keep-duplicates
-```
+This is not a universal browser cache reader. Legacy blockfile caches, sparse entries, separate stream-2 files, compressed HTTP response decoding, and unsupported Simple Cache versions are not recovered. Index and unrelated files are skipped. Image detection is signature-based, not a guarantee that an image is complete or decodable. Only data still present on disk is recoverable.
 
-If the export directory cannot be created, CacheHarvest exits with a descriptive error.
+Malformed recognized entries are counted separately from non-images. Read/write failures are reported, and the CLI exits unsuccessfully when recovery encounters these errors or invalid recognized entries. Traversal and manifest failures also return an error. Successfully written images remain available after a partial failure.
 
-## Notes
+Tests include complete PNG data verified by decoding during fixture creation, format-faithful Simple Cache files with metadata, CRCs and key digests, corruption and truncation cases, repeat exports and collision protection. The fixtures are synthetic and contain no personal browser data; passing these tests is not proof of recovery from every installed Chrome version.
 
-- Chrome should be closed for best extraction results.
-- Only files currently present in cache can be exported.
-- CacheHarvest does not parse Chrome cache index metadata; it scans raw file contents.
-- No network calls are made.
+Format reference: [Chromium Simple Cache entry layout](https://chromium.googlesource.com/chromium/src/+/main/net/disk_cache/simple/simple_entry_format.h).
